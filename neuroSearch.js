@@ -48,7 +48,7 @@ async function getResponse(rmid) {
 
             attempt++;
             if (attempt < maxAttempts) {
-                await new Promise(resolve => setTimeout(resolve, 5000)); // Задержка 5 секунд
+                await new Promise(resolve => setTimeout(resolve, 7000)); // Задержка 5 секунд
                 console.log(`Ожидание ответа от нейросети... Попытка ${attempt + 1} из ${maxAttempts}`);
                 console.log('Ссылки:', links || 'Нет ссылки');
             }
