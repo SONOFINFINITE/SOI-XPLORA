@@ -166,7 +166,33 @@ if (process.env.RENDER_EXTERNAL_URL) {
   const secretPath = `/telegraf/${secretPathComponent}`; // Example: /telegraf/a1b2c3d4...
 
   // Route for Telegram to send updates to
-  app.use(secretPath, webhookCallback(bot, 'express'));
+  app.use(express.json()); // Добавляем парсер JSON
+  
+  app.use(secretPath, async (req, res) => {
+    try {
+      // Проверяем наличие тела запроса
+      if (!req.body) {
+        console.error('Получен пустой запрос webhook');
+        return res.status(400).send('Bad Request: No request body');
+      }
+
+      // Проверяем наличие update_id
+      if (!req.body.update_id) {
+        console.error('Получен webhook без update_id:', req.body);
+        return res.status(400).send('Bad Request: Missing update_id');
+      }
+
+      // Логируем входящий запрос для отладки
+      console.log('Получен webhook запрос:', JSON.stringify(req.body, null, 2));
+
+      // Обрабатываем update через бота
+      await bot.handleUpdate(req.body);
+      res.status(200).send('OK');
+    } catch (error) {
+      console.error('Ошибка обработки webhook:', error);
+      res.status(500).send('Internal Server Error');
+    }
+  });
 
   // Start the server and set up webhook
   app.listen(PORT, async () => {
