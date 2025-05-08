@@ -1,7 +1,7 @@
 const { Bot, webhookCallback } = require('grammy');
 const { sendSearchRequest, getResponse } = require('./neuroSearch');
 const marked = require('marked');
-const { escape } = require('grammy'); // 'escape' is imported but not used in the provided snippet.
+// const { escape } = require('grammy'); // 'escape' is imported but not used.
 const dotenv = require('dotenv');
 dotenv.config();
 
@@ -106,12 +106,8 @@ bot.on('message:text', async (ctx) => {
   try {
     const userQuery = ctx.message.text;
 
-    // Команда /start обрабатывается отдельно, поэтому здесь можно ее пропустить,
-    // хотя grammY обычно обрабатывает bot.command() до bot.on()
     if (userQuery.toLowerCase() === '/start') {
-        // Уже обработано командой bot.command('start', ...)
-        // Можно добавить логирование или просто ничего не делать
-        console.log("Received /start command, already handled.");
+        console.log("Received /start command, handled by bot.command.");
         return;
     }
 
@@ -134,10 +130,8 @@ bot.on('message:text', async (ctx) => {
       disable_web_page_preview: true
     });
 
-    // Optionally, you might want to edit or delete the statusMessage here, e.g.:
+    // Optionally delete status message after successful reply
     // await ctx.api.deleteMessage(statusMessage.chat.id, statusMessage.message_id);
-    // await ctx.api.editMessageText(statusMessage.chat.id, statusMessage.message_id, "✅ Готово!");
-
 
   } catch (error) {
     console.error('Ошибка обработки сообщения:', error);
@@ -151,41 +145,30 @@ bot.on('message:text', async (ctx) => {
 // Check if running in an environment that provides an external URL (like Render)
 if (process.env.RENDER_EXTERNAL_URL) {
   const app = express();
-  // Render provides the PORT environment variable. Default to 10000 if not set.
   const PORT = process.env.PORT || 10000;
 
-  // Endpoint for Render's health checks or to keep the service alive
   app.get('/nosleep', (req, res) => {
     console.log('[HealthCheck] GET /nosleep ping received');
     res.status(200).send('Awake and ready! Thanks for the ping.');
   });
 
-  // Generate a secret path for the webhook to prevent unauthorized access.
-  // Using a hash of the bot token is a common practice.
   const secretPathComponent = crypto.createHash('sha256').update(process.env.BOT_TOKEN).digest('hex').slice(0, 32);
-  const secretPath = `/telegraf/${secretPathComponent}`; // Example: /telegraf/a1b2c3d4...
+  const secretPath = `/telegraf/${secretPathComponent}`;
 
-  // Route for Telegram to send updates to
-  app.use(express.json()); // Добавляем парсер JSON
-  
+  app.use(express.json()); // Middleware to parse JSON bodies
+
+  // Webhook handler route
   app.use(secretPath, async (req, res) => {
     try {
-      // Проверяем наличие тела запроса
       if (!req.body) {
         console.error('Получен пустой запрос webhook');
         return res.status(400).send('Bad Request: No request body');
       }
-
-      // Проверяем наличие update_id
       if (!req.body.update_id) {
         console.error('Получен webhook без update_id:', req.body);
         return res.status(400).send('Bad Request: Missing update_id');
       }
-
-      // Логируем входящий запрос для отладки
-      console.log('Получен webhook запрос:', JSON.stringify(req.body, null, 2));
-
-      // Обрабатываем update через бота
+      // console.log('Получен webhook запрос:', JSON.stringify(req.body, null, 2)); // Already logged by grammY or can be too verbose
       await bot.handleUpdate(req.body);
       res.status(200).send('OK');
     } catch (error) {
@@ -194,63 +177,72 @@ if (process.env.RENDER_EXTERNAL_URL) {
     }
   });
 
-  // Start the server and set up webhook
-  app.listen(PORT, async () => {
-    console.log(`🚀 Express server started on port ${PORT}.`);
+  // Async IIFE to initialize bot and start server
+  (async () => {
     try {
-      const webhookUrl = `${process.env.RENDER_EXTERNAL_URL}${secretPath}`;
-      await bot.api.setWebhook(webhookUrl, {
-        drop_pending_updates: true, // Recommended to drop pending updates during restarts/deployments.
-        // allowed_updates: ['message'] // Optional: Be specific about which updates your bot handles.
-      });
-      console.log(`✅ Webhook successfully set to ${webhookUrl}`);
-      console.log('🤖 Бот запущен в режиме вебхука на Render!');
+      console.log('Initializing bot...');
+      await bot.init(); // Initialize the bot (fetches botInfo)
+      console.log(`Bot initialized: ${bot.botInfo.username} (ID: ${bot.botInfo.id})`);
 
-      // Self-ping mechanism to prevent the service from sleeping on Render's free tier
-      const PING_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
-      const selfPingUrl = `${process.env.RENDER_EXTERNAL_URL}/nosleep`; // Ping the /nosleep endpoint
-
-      const performSelfPing = async () => {
+      app.listen(PORT, async () => {
+        console.log(`🚀 Express server started on port ${PORT}.`);
         try {
-          console.log(`[Self-Ping] Pinging ${selfPingUrl} to stay awake...`);
-          const response = await fetch(selfPingUrl);
-          if (response.ok) {
-            const responseText = await response.text();
-            console.log(`[Self-Ping] Ping successful: ${response.status} - "${responseText.substring(0, 100)}"`); // Log part of response
-          } else {
-            const errorText = await response.text().catch(() => 'Could not read error body');
-            console.warn(`[Self-Ping] Ping failed: ${response.status} ${response.statusText}. Body: ${errorText.substring(0, 200)}`);
-          }
-        } catch (error) {
-          console.error('[Self-Ping] Error during fetch:', error.message);
+          const webhookUrl = `${process.env.RENDER_EXTERNAL_URL}${secretPath}`;
+          await bot.api.setWebhook(webhookUrl, {
+            drop_pending_updates: true,
+          });
+          console.log(`✅ Webhook successfully set to ${webhookUrl}`);
+          console.log('🤖 Бот запущен в режиме вебхука на Render!');
+
+          const PING_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
+          const selfPingUrl = `${process.env.RENDER_EXTERNAL_URL}/nosleep`;
+
+          const performSelfPing = async () => {
+            try {
+              console.log(`[Self-Ping] Pinging ${selfPingUrl} to stay awake...`);
+              const response = await fetch(selfPingUrl);
+              if (response.ok) {
+                const responseText = await response.text();
+                console.log(`[Self-Ping] Ping successful: ${response.status} - "${responseText.substring(0, 50)}..."`);
+              } else {
+                const errorText = await response.text().catch(() => 'Could not read error body');
+                console.warn(`[Self-Ping] Ping failed: ${response.status} ${response.statusText}. Body: ${errorText.substring(0, 100)}...`);
+              }
+            } catch (error) {
+              console.error('[Self-Ping] Error during fetch:', error.message);
+            }
+          };
+
+          setTimeout(performSelfPing, 5000); // Initial ping
+          setInterval(performSelfPing, PING_INTERVAL_MS);
+
+        } catch (e) {
+          console.error('❌ Critical error during webhook setup or server start:', e);
+          process.exit(1);
         }
-      };
-
-      // Perform an initial ping shortly after startup, then set interval
-      setTimeout(performSelfPing, 5000); // Initial ping after 5 seconds
-      setInterval(performSelfPing, PING_INTERVAL_MS);
-
-    } catch (e) {
-      console.error('❌ Critical error during webhook setup or server start:', e);
-      process.exit(1); // Exit if webhook setup fails in production
+      });
+    } catch (initError) {
+      console.error('❌ Failed to initialize bot:', initError);
+      process.exit(1);
     }
-  });
+  })();
 
 } else {
-  // Fallback to polling for local development or other environments
-  console.warn('⚠️ RENDER_EXTERNAL_URL not found in environment variables.');
-  console.warn('   Starting bot in polling mode for local development.');
-  console.warn('   Web service features (webhook, /nosleep, self-ping) are designed for Render and will not be active.');
-  console.warn('   If deploying to Render, ensure RENDER_EXTERNAL_URL is automatically set by the platform for your Web Service.');
-
-  bot.start()
-    .then(() => {
+  // Fallback to polling
+  console.warn('⚠️ RENDER_EXTERNAL_URL not found. Starting in polling mode.');
+  (async () => {
+    try {
+      // No need to call bot.init() separately for bot.start(), it handles it.
+      // However, if you want to access bot.botInfo before bot.start() promise resolves,
+      // you could call await bot.init(); here too.
+      // For consistency and accessing botInfo early:
+      await bot.init();
+      console.log(`Bot initialized: ${bot.botInfo.username} (ID: ${bot.botInfo.id})`);
+      await bot.start(); // bot.start() will also call getMe if not already initialized.
       console.log('🤖 Бот запущен в режиме опроса (polling)!');
-    })
-    .catch((err) => {
+    } catch (err) {
       console.error('❌ Failed to start bot in polling mode:', err);
       process.exit(1);
-    });
+    }
+  })();
 }
-// --- END OF MODIFIED STARTUP LOGIC ---
-// Original `bot.start();` and `console.log('Бот запущен!');` are removed as startup is now handled above.
