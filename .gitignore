@@ -1,4 +1,5 @@
 node_modules
+temp_audio/
 .env
 .DS_Store
 *.log
