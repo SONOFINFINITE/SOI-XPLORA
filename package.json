@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "grammy": "^1.36.1",
+    "marked": "^15.0.11"
+  }
+}
