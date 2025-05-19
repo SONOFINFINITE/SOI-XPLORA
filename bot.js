@@ -242,7 +242,25 @@ bot.on('message:text', async (ctx) => {
         console.log("Received /start command, handled by bot.command.");
         return;
     }
-    await processUserQuery(ctx, userQuery, ctx.message.message_id);
+    
+    // Проверяем, является ли сообщение ответом на сообщение бота
+    let queryWithContext = userQuery;
+    if (ctx.message.reply_to_message && ctx.message.reply_to_message.from?.id === bot.botInfo.id) {
+      try {
+        // Извлекаем текст предыдущего сообщения бота
+        const botResponseText = ctx.message.reply_to_message.text || ctx.message.reply_to_message.caption || '';
+        if (botResponseText) {
+          console.log(`Пользователь ответил на сообщение бота. Добавляем контекст.`);
+          // Объединяем предыдущий ответ бота с новым запросом пользователя
+          queryWithContext = `Мой предыдущий ответ: "${botResponseText}". Уточняющий вопрос пользователя: "${userQuery}"`;
+        }
+      } catch (contextError) {
+        console.error('Ошибка при обработке контекста сообщения:', contextError);
+        // Если произошла ошибка при получении контекста, используем только запрос пользователя
+      }
+    }
+    
+    await processUserQuery(ctx, queryWithContext, ctx.message.message_id);
   } catch (error) {
     console.error('Общая ошибка в обработчике текстового сообщения:', error);
     await ctx.reply('⚠️ Произошла непредвиденная ошибка.', {
@@ -313,7 +331,24 @@ bot.on('message:voice', async (ctx) => {
     }
 
     console.log(`Transcribed text: "${transcribedText}"`);
-    await processUserQuery(ctx, transcribedText, originalMessageId);
+    
+    // Проверяем, является ли голосовое сообщение ответом на сообщение бота
+    let queryWithContext = transcribedText;
+    if (ctx.message.reply_to_message && ctx.message.reply_to_message.from?.id === bot.botInfo.id) {
+      try {
+        // Извлекаем текст предыдущего сообщения бота
+        const botResponseText = ctx.message.reply_to_message.text || ctx.message.reply_to_message.caption || '';
+        if (botResponseText) {
+          console.log(`Голосовой ответ на сообщение бота. Добавляем контекст.`);
+          // Объединяем предыдущий ответ бота с новым запросом пользователя
+          queryWithContext = `Мой предыдущий ответ: "${botResponseText}". Уточняющий вопрос пользователя: "${transcribedText}"`;
+        }
+      } catch (contextError) {
+        console.error('Ошибка при обработке контекста голосового сообщения:', contextError);
+      }
+    }
+    
+    await processUserQuery(ctx, queryWithContext, originalMessageId);
 
   } catch (error) {
     console.error('Ошибка обработки голосового сообщения:', error);
